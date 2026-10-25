@@ -8,7 +8,6 @@
   />
   <title>Realidad aumentada del libro</title>
 
-  <!-- Librerías -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
@@ -35,7 +34,7 @@
       z-index: 0 !important;
     }
 
-    /* La escena y el canvas deben ser transparentes */
+    /* Canvas transparente de A-Frame encima de la cámara */
     a-scene {
       position: fixed !important;
       top: 0 !important;
@@ -108,12 +107,18 @@
 
 <body>
   <div id="mensaje">Apunta la cámara hacia la página del libro</div>
-  <button id="iniciar" type="button">Reproducir animación</button>
-  <div id="diagnostico">Iniciando realidad aumentada...</div>
+
+  <button id="iniciar" type="button">
+    Reproducir animación
+  </button>
+
+  <div id="diagnostico">
+    Iniciando realidad aumentada...
+  </div>
 
   <a-scene
     id="escena"
-    mindar-image="imageTargetSrc: ./targets/pagina.mind; autoStart: true; uiLoading: yes; uiScanning: no; uiError: yes;"
+    mindar-image="imageTargetSrc: ./pagina.mind; autoStart: true; uiLoading: yes; uiScanning: no; uiError: yes;"
     color-space="sRGB"
     renderer="alpha: true; colorManagement: true"
     vr-mode-ui="enabled: false"
@@ -122,7 +127,7 @@
     <a-assets timeout="15000">
       <video
         id="videoAnimacion"
-        src="./videos/animacion.mp4"
+        src="./animacion.mp4"
         preload="auto"
         loop
         muted
@@ -140,7 +145,7 @@
       id="paginaObjetivo"
       mindar-image-target="targetIndex: 0"
     >
-      <!-- Para un video horizontal 16:9 -->
+      <!-- Video horizontal 16:9 -->
       <a-video
         id="videoAR"
         src="#videoAnimacion"
@@ -171,30 +176,40 @@
     log('Cargando MindAR...');
     log('HTTPS: ' + (window.isSecureContext ? 'sí' : 'NO'));
 
-    // Comprobar que los archivos del proyecto existan.
-    fetch('./targets/pagina.mind', { method: 'HEAD' })
+    // Los archivos están en la raíz del repositorio.
+    fetch('./pagina.mind', { method: 'HEAD' })
       .then((respuesta) => {
-        log('pagina.mind: ' + (respuesta.ok ? 'OK' : 'ERROR ' + respuesta.status));
+        log(
+          'pagina.mind: ' +
+          (respuesta.ok ? 'OK' : 'ERROR ' + respuesta.status)
+        );
       })
-      .catch(() => log('pagina.mind: no se pudo comprobar'));
+      .catch(() => {
+        log('pagina.mind: no se pudo comprobar');
+      });
 
-    fetch('./videos/animacion.mp4', { method: 'HEAD' })
+    fetch('./animacion.mp4', { method: 'HEAD' })
       .then((respuesta) => {
-        log('animacion.mp4: ' + (respuesta.ok ? 'OK' : 'ERROR ' + respuesta.status));
+        log(
+          'animacion.mp4: ' +
+          (respuesta.ok ? 'OK' : 'ERROR ' + respuesta.status)
+        );
       })
-      .catch(() => log('animacion.mp4: no se pudo comprobar'));
+      .catch(() => {
+        log('animacion.mp4: no se pudo comprobar');
+      });
 
-    // MindAR terminó de iniciar la cámara y el reconocimiento.
     escena.addEventListener('arReady', () => {
       log('Cámara lista');
-      mensaje.textContent = 'Apunta la cámara hacia la página del libro';
+      mensaje.textContent =
+        'Apunta la cámara hacia la página del libro';
     });
 
-    // Error al iniciar cámara o cargar el archivo .mind.
     escena.addEventListener('arError', (evento) => {
       console.error('Error de MindAR:', evento);
       log('Error: no se pudo iniciar la cámara');
-      mensaje.textContent = 'No se pudo abrir la cámara. Revisa los permisos.';
+      mensaje.textContent =
+        'No se pudo abrir la cámara. Revisa los permisos.';
     });
 
     function reproducirAnimacion() {
@@ -209,14 +224,18 @@
             log('Animación reproduciéndose');
           })
           .catch((error) => {
-            console.error('No se pudo reproducir el video:', error);
+            console.error(
+              'No se pudo reproducir el video:',
+              error
+            );
+
             botonIniciar.style.display = 'block';
-            mensaje.textContent = 'Pulsa el botón para reproducir la animación';
+            mensaje.textContent =
+              'Pulsa el botón para reproducir la animación';
           });
       }
     }
 
-    // Cuando MindAR reconoce la página.
     paginaObjetivo.addEventListener('targetFound', () => {
       log('Página reconocida');
       mensaje.textContent = 'Página reconocida';
@@ -226,17 +245,16 @@
       reproducirAnimacion();
     });
 
-    // Cuando se deja de ver la página.
     paginaObjetivo.addEventListener('targetLost', () => {
       log('Página no visible');
-      mensaje.textContent = 'Apunta nuevamente hacia la página';
+      mensaje.textContent =
+        'Apunta nuevamente hacia la página';
 
       videoAR.setAttribute('visible', 'false');
       video.pause();
       botonIniciar.style.display = 'none';
     });
 
-    // Algunos celulares requieren una interacción del usuario para reproducir video.
     botonIniciar.addEventListener('click', () => {
       reproducirAnimacion();
     });
@@ -247,7 +265,8 @@
 
     video.addEventListener('error', () => {
       log('Error al cargar animacion.mp4');
-      mensaje.textContent = 'No se pudo cargar la animación.';
+      mensaje.textContent =
+        'No se pudo cargar la animación.';
     });
 
     window.addEventListener('error', (evento) => {
