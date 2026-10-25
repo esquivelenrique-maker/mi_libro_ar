@@ -2,25 +2,27 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-  />
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Realidad aumentada del libro</title>
 
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-
+  <!-- MindAR 1.2.5 está probado con A-Frame 1.5.0 -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
-    html,
-    body {
+    /* Sin color de fondo: MindAR pone la imagen de la cámara detrás de la página
+       y un fondo en html/body la tapa (pantalla negra). */
+    html, body {
       margin: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #000;
+      background: transparent;
+    }
+
+    /* Asegura que el video de la cámara ocupe toda la pantalla */
+    body > video {
+      object-fit: cover;
     }
 
     #mensaje {
@@ -57,29 +59,20 @@
 </head>
 
 <body>
-  <div id="mensaje">
-    Apunta la cámara hacia la página del libro
-  </div>
-
+  <div id="mensaje">Apunta la cámara hacia la página del libro</div>
   <button id="iniciar">Reproducir animación</button>
 
   <a-scene
-    mindar-image="
-      imageTargetSrc: ./pagina.mind;
-      autoStart: true;
-      uiLoading: no;
-      uiScanning: yes;
-      uiError: yes;
-    "
+    mindar-image="imageTargetSrc: ./targets/pagina.mind; autoStart: true; uiLoading: yes; uiScanning: no; uiError: yes;"
     color-space="sRGB"
-    renderer="colorManagement: true, physicallyCorrectLights"
+    renderer="colorManagement: true"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false">
 
-    <a-assets>
+    <a-assets timeout="10000">
       <video
         id="videoAnimacion"
-        src="./animacion.mp4"
+        src="./videos/animacion.mp4"
         preload="auto"
         loop
         muted
@@ -89,26 +82,18 @@
       </video>
     </a-assets>
 
-    <a-camera
-      position="0 0 0"
-      look-controls="enabled: false">
-    </a-camera>
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <!-- targetIndex 0 corresponde a pagina.mind -->
-    <a-entity
-      id="paginaObjetivo"
-      mindar-image-target="targetIndex: 0">
-
-      <!-- Cambia estos valores si tu video tiene otra proporción -->
+    <!-- targetIndex 0 = primera imagen compilada en pagina.mind -->
+    <a-entity id="paginaObjetivo" mindar-image-target="targetIndex: 0">
+      <!-- width 1 = ancho de la imagen objetivo. height = 1 / (proporción del video). 16:9 → 0.5625 -->
       <a-video
         id="videoAR"
         src="#videoAnimacion"
         width="1"
         height="0.5625"
-        position="0 0 0.02"
-        rotation="0 0 0">
+        position="0 0 0.01">
       </a-video>
-
     </a-entity>
   </a-scene>
 
@@ -117,31 +102,41 @@
     const video = document.querySelector("#videoAnimacion");
     const mensaje = document.querySelector("#mensaje");
     const botonIniciar = document.querySelector("#iniciar");
+    const videoAR = document.querySelector("#videoAR");
 
-    paginaObjetivo.addEventListener("targetFound", () => {
-      mensaje.textContent = "Página reconocida";
+    // Ocultar el plano hasta que se reconozca la página
+    videoAR.setAttribute("visible", false);
 
-      video.currentTime = 0;
-
-      const reproduccion = video.play();
-
-      if (reproduccion !== undefined) {
-        reproduccion.catch(() => {
+    function reproducir() {
+      const p = video.play();
+      if (p !== undefined) {
+        p.then(() => {
+          botonIniciar.style.display = "none";
+        }).catch(() => {
           botonIniciar.style.display = "block";
           mensaje.textContent = "Pulsa el botón para reproducir la animación";
         });
       }
+    }
+
+    paginaObjetivo.addEventListener("targetFound", () => {
+      mensaje.textContent = "Página reconocida";
+      videoAR.setAttribute("visible", true);
+      video.currentTime = 0;
+      reproducir();
     });
 
     paginaObjetivo.addEventListener("targetLost", () => {
       mensaje.textContent = "Apunta nuevamente hacia la página";
+      videoAR.setAttribute("visible", false);
       video.pause();
       botonIniciar.style.display = "none";
     });
 
     botonIniciar.addEventListener("click", () => {
-      video.play();
-      botonIniciar.style.display = "none";
+      // Al tocar el botón ya hay interacción del usuario: se puede activar el sonido
+      video.muted = false;
+      reproducir();
     });
   </script>
 </body>
