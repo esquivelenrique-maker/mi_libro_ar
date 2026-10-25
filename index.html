@@ -2,32 +2,57 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
   <title>Realidad aumentada del libro</title>
 
-  <!-- MindAR 1.2.5 está probado con A-Frame 1.5.0 -->
+  <!-- Librerías -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
-    /* Sin color de fondo: MindAR pone la imagen de la cámara detrás de la página
-       y un fondo en html/body la tapa (pantalla negra). */
-    html, body {
+    html,
+    body {
       margin: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
       background: transparent;
+      font-family: Arial, sans-serif;
     }
 
-    /* Asegura que el video de la cámara ocupe toda la pantalla */
+    /* Video de la cámara creado por MindAR */
     body > video {
-      object-fit: cover;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      display: block !important;
+      z-index: 0 !important;
     }
 
-    /* El lienzo 3D debe ser transparente para dejar ver la cámara */
-    .a-canvas,
+    /* La escena y el canvas deben ser transparentes */
     a-scene {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      z-index: 1 !important;
+      background: transparent !important;
+    }
+
+    .a-canvas {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      z-index: 1 !important;
       background: transparent !important;
     }
 
@@ -38,12 +63,12 @@
       left: 50%;
       transform: translateX(-50%);
       width: 85%;
+      box-sizing: border-box;
       padding: 12px 16px;
       border-radius: 10px;
       background: rgba(0, 0, 0, 0.7);
       color: white;
       text-align: center;
-      font-family: Arial, sans-serif;
       font-size: 16px;
     }
 
@@ -57,26 +82,44 @@
       padding: 14px 22px;
       border: 0;
       border-radius: 8px;
-      background: #ffffff;
-      color: #111111;
+      background: white;
+      color: #111;
       font-size: 16px;
+      cursor: pointer;
+    }
+
+    #diagnostico {
+      position: fixed;
+      z-index: 30;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #7cfc00;
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      pointer-events: none;
     }
   </style>
 </head>
 
 <body>
   <div id="mensaje">Apunta la cámara hacia la página del libro</div>
-  <button id="iniciar">Reproducir animación</button>
+  <button id="iniciar" type="button">Reproducir animación</button>
+  <div id="diagnostico">Iniciando realidad aumentada...</div>
 
   <a-scene
+    id="escena"
     mindar-image="imageTargetSrc: ./targets/pagina.mind; autoStart: true; uiLoading: yes; uiScanning: no; uiError: yes;"
     color-space="sRGB"
-    renderer="colorManagement: true; alpha: true"
-    background="transparent: true"
+    renderer="alpha: true; colorManagement: true"
     vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: false">
-
-    <a-assets timeout="10000">
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets timeout="15000">
       <video
         id="videoAnimacion"
         src="./videos/animacion.mp4"
@@ -85,65 +128,130 @@
         muted
         playsinline
         webkit-playsinline
-        crossorigin="anonymous">
-      </video>
+      ></video>
     </a-assets>
 
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    <a-camera
+      position="0 0 0"
+      look-controls="enabled: false"
+    ></a-camera>
 
-    <!-- targetIndex 0 = primera imagen compilada en pagina.mind -->
-    <a-entity id="paginaObjetivo" mindar-image-target="targetIndex: 0">
-      <!-- width 1 = ancho de la imagen objetivo. height = 1 / (proporción del video). 16:9 → 0.5625 -->
+    <a-entity
+      id="paginaObjetivo"
+      mindar-image-target="targetIndex: 0"
+    >
+      <!-- Para un video horizontal 16:9 -->
       <a-video
         id="videoAR"
         src="#videoAnimacion"
         width="1"
         height="0.5625"
-        position="0 0 0.01">
-      </a-video>
+        position="0 0 0.01"
+        visible="false"
+      ></a-video>
     </a-entity>
   </a-scene>
 
   <script>
-    const paginaObjetivo = document.querySelector("#paginaObjetivo");
-    const video = document.querySelector("#videoAnimacion");
-    const mensaje = document.querySelector("#mensaje");
-    const botonIniciar = document.querySelector("#iniciar");
-    const videoAR = document.querySelector("#videoAR");
+    const escena = document.querySelector('#escena');
+    const paginaObjetivo = document.querySelector('#paginaObjetivo');
+    const video = document.querySelector('#videoAnimacion');
+    const videoAR = document.querySelector('#videoAR');
+    const mensaje = document.querySelector('#mensaje');
+    const botonIniciar = document.querySelector('#iniciar');
+    const diagnostico = document.querySelector('#diagnostico');
 
-    // Ocultar el plano hasta que se reconozca la página
-    videoAR.setAttribute("visible", false);
+    const lineas = [];
 
-    function reproducir() {
-      const p = video.play();
-      if (p !== undefined) {
-        p.then(() => {
-          botonIniciar.style.display = "none";
-        }).catch(() => {
-          botonIniciar.style.display = "block";
-          mensaje.textContent = "Pulsa el botón para reproducir la animación";
-        });
+    function log(texto) {
+      lineas.push(texto);
+      diagnostico.textContent = lineas.slice(-6).join('\n');
+    }
+
+    log('Cargando MindAR...');
+    log('HTTPS: ' + (window.isSecureContext ? 'sí' : 'NO'));
+
+    // Comprobar que los archivos del proyecto existan.
+    fetch('./targets/pagina.mind', { method: 'HEAD' })
+      .then((respuesta) => {
+        log('pagina.mind: ' + (respuesta.ok ? 'OK' : 'ERROR ' + respuesta.status));
+      })
+      .catch(() => log('pagina.mind: no se pudo comprobar'));
+
+    fetch('./videos/animacion.mp4', { method: 'HEAD' })
+      .then((respuesta) => {
+        log('animacion.mp4: ' + (respuesta.ok ? 'OK' : 'ERROR ' + respuesta.status));
+      })
+      .catch(() => log('animacion.mp4: no se pudo comprobar'));
+
+    // MindAR terminó de iniciar la cámara y el reconocimiento.
+    escena.addEventListener('arReady', () => {
+      log('Cámara lista');
+      mensaje.textContent = 'Apunta la cámara hacia la página del libro';
+    });
+
+    // Error al iniciar cámara o cargar el archivo .mind.
+    escena.addEventListener('arError', (evento) => {
+      console.error('Error de MindAR:', evento);
+      log('Error: no se pudo iniciar la cámara');
+      mensaje.textContent = 'No se pudo abrir la cámara. Revisa los permisos.';
+    });
+
+    function reproducirAnimacion() {
+      video.muted = true;
+
+      const promesa = video.play();
+
+      if (promesa !== undefined) {
+        promesa
+          .then(() => {
+            botonIniciar.style.display = 'none';
+            log('Animación reproduciéndose');
+          })
+          .catch((error) => {
+            console.error('No se pudo reproducir el video:', error);
+            botonIniciar.style.display = 'block';
+            mensaje.textContent = 'Pulsa el botón para reproducir la animación';
+          });
       }
     }
 
-    paginaObjetivo.addEventListener("targetFound", () => {
-      mensaje.textContent = "Página reconocida";
-      videoAR.setAttribute("visible", true);
+    // Cuando MindAR reconoce la página.
+    paginaObjetivo.addEventListener('targetFound', () => {
+      log('Página reconocida');
+      mensaje.textContent = 'Página reconocida';
+
+      videoAR.setAttribute('visible', 'true');
       video.currentTime = 0;
-      reproducir();
+      reproducirAnimacion();
     });
 
-    paginaObjetivo.addEventListener("targetLost", () => {
-      mensaje.textContent = "Apunta nuevamente hacia la página";
-      videoAR.setAttribute("visible", false);
+    // Cuando se deja de ver la página.
+    paginaObjetivo.addEventListener('targetLost', () => {
+      log('Página no visible');
+      mensaje.textContent = 'Apunta nuevamente hacia la página';
+
+      videoAR.setAttribute('visible', 'false');
       video.pause();
-      botonIniciar.style.display = "none";
+      botonIniciar.style.display = 'none';
     });
 
-    botonIniciar.addEventListener("click", () => {
-      // Al tocar el botón ya hay interacción del usuario: se puede activar el sonido
-      video.muted = false;
-      reproducir();
+    // Algunos celulares requieren una interacción del usuario para reproducir video.
+    botonIniciar.addEventListener('click', () => {
+      reproducirAnimacion();
+    });
+
+    video.addEventListener('loadeddata', () => {
+      log('Video cargado');
+    });
+
+    video.addEventListener('error', () => {
+      log('Error al cargar animacion.mp4');
+      mensaje.textContent = 'No se pudo cargar la animación.';
+    });
+
+    window.addEventListener('error', (evento) => {
+      log('Error: ' + evento.message);
     });
   </script>
 </body>
