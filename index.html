@@ -127,7 +127,7 @@
     <a-assets timeout="15000">
       <video
         id="videoAnimacion"
-        src="./animacion.mp4"
+        src="./animacion_hoja.mp4"
         preload="auto"
         loop
         muted
@@ -193,14 +193,14 @@
       })
       .catch(() => log('pagina.mind: no se pudo comprobar'));
 
-    fetch('./animacion.mp4', { method: 'HEAD' })
+    fetch('./animacion_hoja.mp4', { method: 'HEAD' })
       .then((respuesta) => {
         log(
-          'animacion.mp4: ' +
+          'animacion_hoja.mp4: ' +
             (respuesta.ok ? 'OK' : 'ERROR ' + respuesta.status)
         );
       })
-      .catch(() => log('animacion.mp4: no se pudo comprobar'));
+      .catch(() => log('animacion_hoja.mp4: no se pudo comprobar'));
 
     escena.addEventListener('arReady', () => {
       log('Cámara lista');
@@ -252,7 +252,7 @@
     video.addEventListener('loadeddata', () => log('Video cargado'));
 
     video.addEventListener('error', () => {
-      log('Error al cargar animacion.mp4');
+      log('Error al cargar animacion_hoja.mp4');
       mensaje.textContent = 'No se pudo cargar la animación.';
     });
 
