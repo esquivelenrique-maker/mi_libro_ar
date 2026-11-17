@@ -5,209 +5,119 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#101820" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>El libro cobra vida · Realidad aumentada</title>
-
-  <!-- Se conservan las versiones de tu código original. -->
+  <title>Escáner del libro</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
   <style>
-    :root { color-scheme: dark; font-family: Arial, Helvetica, sans-serif; }
     * { box-sizing: border-box; }
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
-    body { color: #fff; background: #101820; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: #101820; font-family: Arial, Helvetica, sans-serif; }
     [hidden] { display: none !important; }
-    /* El contexto aislado mantiene visible la cámara que MindAR coloca con z-index negativo. */
-    #visor { position: fixed; inset: 0; isolation: isolate; z-index: 0; background: #101820; }
+    #visor { position: fixed; inset: 0; isolation: isolate; z-index: 0; }
     #visor a-scene { width: 100%; height: 100%; }
-    #estado {
-      position: fixed; z-index: 20;
-      top: max(16px, env(safe-area-inset-top)); left: 16px; right: 16px;
-      max-width: 560px; margin: 0 auto; padding: 12px 16px;
-      border: 1px solid rgba(255,255,255,.18); border-radius: 14px;
-      background: rgba(16,24,32,.82); color: #fff;
-      font-size: 15px; line-height: 1.45; text-align: center;
-      pointer-events: none;
+    #escaner {
+      position: fixed; inset: 0; z-index: 10; pointer-events: none;
+      display: flex; align-items: center; justify-content: center;
     }
-    #portada {
-      position: fixed; inset: 0; z-index: 30; display: flex;
-      align-items: center; justify-content: center; padding: 24px;
-      background: rgba(16,24,32,.94);
+    .marco {
+      position: relative; width: min(78vw, 340px, 70vh); aspect-ratio: 1;
+      border: 1px solid rgba(255,255,255,.28); border-radius: 16px;
+      /* Sin relleno ni sombra: toda la cámara sigue siendo visible. */
     }
-    .tarjeta { width: 100%; max-width: 430px; }
-    .etiqueta { color: #99d7c6; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
-    h1 { font-size: clamp(30px, 7vw, 42px); line-height: 1.12; margin: 16px 0; }
-    .tarjeta p { color: #d7e1e7; line-height: 1.6; }
-    button {
-      border: 0; border-radius: 12px; padding: 14px 18px;
-      font: inherit; font-weight: bold; cursor: pointer;
-      min-height: 48px; color: #10261f; background: #a3e3cd;
+    .esquina { position: absolute; width: 36px; height: 36px; border: 3px solid #a3e3cd; }
+    .superior-izquierda { top: -2px; left: -2px; border-right: 0; border-bottom: 0; border-radius: 16px 0 0 0; }
+    .superior-derecha { top: -2px; right: -2px; border-left: 0; border-bottom: 0; border-radius: 0 16px 0 0; }
+    .inferior-izquierda { bottom: -2px; left: -2px; border-right: 0; border-top: 0; border-radius: 0 0 0 16px; }
+    .inferior-derecha { bottom: -2px; right: -2px; border-left: 0; border-top: 0; border-radius: 0 0 16px 0; }
+    .linea {
+      position: absolute; left: 12px; right: 12px; height: 2px; top: 12px;
+      background: #a3e3cd; box-shadow: 0 0 9px rgba(163,227,205,.55);
+      animation: escanear 2.6s ease-in-out infinite alternate;
     }
-    button:disabled { opacity: .6; cursor: wait; }
-    button:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
-    #abrirCamara { width: 100%; margin-top: 12px; }
-    .opcionAudio { display: flex; align-items: center; gap: 10px; margin: 20px 0 8px; }
-    .opcionAudio input { width: 20px; height: 20px; accent-color: #a3e3cd; }
-    .nota { font-size: 13px; }
-    #controles {
-      position: fixed; z-index: 20; left: 16px; right: 16px;
-      bottom: max(20px, env(safe-area-inset-bottom));
-      display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
+    @keyframes escanear { from { top: 12px; } to { top: calc(100% - 14px); } }
+    @media (prefers-reduced-motion: reduce) { .linea { animation: none; top: 50%; } }
+    #acciones {
+      position: fixed; z-index: 20; left: 20px; right: 20px;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
     }
+    #error {
+      margin: 0; max-width: 440px; padding: 10px 14px; border-radius: 10px;
+      color: #fff; background: rgba(16,24,32,.9); line-height: 1.45;
+      font-size: 14px; text-align: center;
+    }
+    #accion {
+      padding: 14px 20px; min-height: 48px; border: 0; border-radius: 12px;
+      background: #a3e3cd; color: #10261f; font: bold 15px Arial, sans-serif;
+      cursor: pointer;
+    }
+    #accion:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
   </style>
 </head>
 <body>
-  <main id="visor" aria-label="Visor de realidad aumentada"></main>
-  <!-- Estado interno accesible al código; nunca es un mensaje sobre la cámara. -->
-  <div id="estado" hidden>Preparando el visor…</div>
-
-  <section id="portada" aria-labelledby="titulo">
-    <div class="tarjeta">
-      <span class="etiqueta">Realidad aumentada del libro</span>
-      <h1 id="titulo">Descubre lo que vive en cada dibujo.</h1>
-      <p>Activa la cámara y apunta al dibujo completo. Su imagen o video aparecerá sobre la página y se ocultará cuando dejes de enfocarla.</p>
-      <label class="opcionAudio"><input id="usarAudio" type="checkbox" checked /> Reproducir la voz y el sonido del video</label>
-      <button id="abrirCamara" type="button" disabled>Preparando el visor…</button>
-      <p class="nota" id="ayudaInicio" role="status">No habrá mensajes encima del video. Si tu navegador bloquea la reproducción, te pedirá un toque antes de mostrarlo.</p>
+  <main id="visor" aria-label="Cámara del libro"></main>
+  <div id="escaner" aria-label="Recuadro para escanear el dibujo">
+    <div class="marco" aria-hidden="true">
+      <span class="esquina superior-izquierda"></span>
+      <span class="esquina superior-derecha"></span>
+      <span class="esquina inferior-izquierda"></span>
+      <span class="esquina inferior-derecha"></span>
+      <span class="linea"></span>
     </div>
-  </section>
-
-  <nav id="controles" aria-label="Autorizar reproducción" hidden>
-    <button id="reproducir" type="button" hidden>Reproducir video</button>
-  </nav>
-  <noscript>Activa JavaScript en tu navegador para usar la realidad aumentada.</noscript>
+  </div>
+  <!-- Solo aparecen si hay un error o el navegador exige autorizar el video. -->
+  <div id="acciones" hidden>
+    <p id="error" role="alert" hidden></p>
+    <button id="accion" type="button" hidden>Reproducir video</button>
+  </div>
+  <noscript>Activa JavaScript para abrir la cámara.</noscript>
 
   <script>
     "use strict";
 
-    // ============================================================
-    // CONFIGURACIÓN: EDITA ÚNICAMENTE ESTA SECCIÓN PARA TUS ARCHIVOS.
-    // ============================================================
-
-    // Un único .mind debe incluir TODOS los dibujos reconocibles.
-    // Conserva tu ruta original. Si no usas carpetas, escribe "./pagina.mind".
-    const ARCHIVO_MIND = "./targets/pagina.mind";
-
+    // CONFIGURACIÓN. Tus archivos están junto a index.html, sin carpetas.
+    const ARCHIVO_MIND = "./pagina.mind";
+    const USAR_SONIDO = true; // false: reproducción automática sin voz.
     const CONTENIDOS = [
       {
-        targetIndex: 0,                 // Primera imagen dentro del .mind.
-        nombre: "Página 1",
-        tipo: "video",                 // "video" o "imagen".
-        archivo: "./videos/animacion.mp4",
-        ancho: 1,                       // 1 = ancho completo del dibujo reconocido.
-        altoMaximo: null,               // Opcional: limita la altura SIN deformar.
-        posicion: "0 0 0.02",           // Centrado, ligeramente por delante del papel.
+        targetIndex: 0,
+        tipo: "video",             // "video" o "imagen".
+        archivo: "./animacion.mp4",
+        ancho: 1,
+        altoMaximo: null,           // Limita el alto sin deformar, si lo necesitas.
+        posicion: "0 0 0.02",
         rotacion: "0 0 0",
         repetir: true,
-        reiniciarAlDetectar: false       // false: continúa desde donde se pausó.
+        reiniciarAlDetectar: false
       }
-
-      // Para añadir más dibujos, pon una coma después del objeto anterior
-      // y descomenta los objetos necesarios. Sus índices deben existir en el .mind.
-      // ,{
-      //   targetIndex: 1,
-      //   nombre: "Página 2",
-      //   tipo: "video",
-      //   archivo: "./video2.mp4",
-      //   ancho: 1,
-      //   altoMaximo: null,
-      //   posicion: "0 0 0.02",
-      //   repetir: true,
-      //   reiniciarAlDetectar: false
-      // }
-      // ,{
-      //   targetIndex: 2,
-      //   nombre: "Página 3",
-      //   tipo: "imagen",
-      //   archivo: "./imagen3.png",
-      //   ancho: 1,
-      //   altoMaximo: null,
-      //   posicion: "0 0 0.02"
-      // }
+      // Para más dibujos, añade objetos con targetIndex: 1, 2, etc.
+      // Deben estar compilados juntos en el .mind. Ejemplo:
+      // ,{ targetIndex: 1, tipo: "video", archivo: "./video2.mp4", ancho: 1 }
+      // ,{ targetIndex: 2, tipo: "imagen", archivo: "./imagen3.png", ancho: 1 }
     ];
 
-    // ============================================================
-    // FUNCIONAMIENTO DEL VISOR.
-    // ============================================================
     const visor = document.querySelector("#visor");
-    const estado = document.querySelector("#estado");
-    const portada = document.querySelector("#portada");
-    const abrirCamara = document.querySelector("#abrirCamara");
-    const ayudaInicio = document.querySelector("#ayudaInicio");
-    const controles = document.querySelector("#controles");
-    const reproducir = document.querySelector("#reproducir");
-    const usarAudio = document.querySelector("#usarAudio");
-
+    const escaner = document.querySelector("#escaner");
+    const acciones = document.querySelector("#acciones");
+    const errorTexto = document.querySelector("#error");
+    const boton = document.querySelector("#accion");
+    const entradas = [];
     let escena;
     let sistema;
     let activa = null;
-    let arListo = false;
-    let conSonido = true;
+    let listo = false;
+    let iniciando = false;
     let falloFatal = false;
     let pausadoPorPestana = false;
-    const entradas = [];
 
-    function mensaje(texto) {
-      estado.textContent = texto;
-      if (!portada.hidden) ayudaInicio.textContent = texto;
+    function limpiarAcciones() {
+      acciones.hidden = true;
+      errorTexto.hidden = true;
+      boton.hidden = true;
     }
 
-    function errorInicio(texto) {
-      falloFatal = true;
-      arListo = false;
-      entradas.forEach(ocultar);
-      activa = null;
-      controles.hidden = true;
-      portada.hidden = false;
-      abrirCamara.disabled = false;
-      abrirCamara.textContent = "Recargar para volver a intentar";
-      ayudaInicio.textContent = texto;
-      mensaje(texto);
-      // No llama a stop() si el controlador aún no existe: MindAR 1.2.5 lo requiere.
-      const camara = sistema && sistema.video;
-      if (camara && camara.srcObject) {
-        camara.srcObject.getTracks().forEach((pista) => pista.stop());
-      }
-      if (sistema && sistema.controller) sistema.controller.stopProcessVideo();
-    }
-
-    function validarConfiguracion() {
-      if (!CONTENIDOS.length) throw new Error("Añade al menos un contenido en CONTENIDOS.");
-      const indices = new Set();
-      CONTENIDOS.forEach((config) => {
-        if (!Number.isInteger(config.targetIndex) || config.targetIndex < 0 || indices.has(config.targetIndex)) {
-          throw new Error("Cada targetIndex debe ser un entero diferente, comenzando en 0.");
-        }
-        indices.add(config.targetIndex);
-        if (!["video", "imagen"].includes(config.tipo) || !config.archivo) {
-          throw new Error("Cada contenido necesita tipo 'video' o 'imagen' y una ruta de archivo.");
-        }
-        if (!(Number(config.ancho ?? 1) > 0)) throw new Error("El ancho debe ser mayor que 0.");
-        if (config.altoMaximo != null && !(Number(config.altoMaximo) > 0)) {
-          throw new Error("altoMaximo debe ser null o un número mayor que 0.");
-        }
-      });
-    }
-
-    function ajustarProporcion(entrada) {
-      const medio = entrada.medio;
-      const anchoOriginal = entrada.config.tipo === "video" ? medio.videoWidth : medio.naturalWidth;
-      const altoOriginal = entrada.config.tipo === "video" ? medio.videoHeight : medio.naturalHeight;
-      if (!anchoOriginal || !altoOriginal) return;
-      const proporcion = anchoOriginal / altoOriginal;
-      let ancho = Number(entrada.config.ancho ?? 1);
-      let alto = ancho / proporcion;
-      if (entrada.config.altoMaximo != null && alto > entrada.config.altoMaximo) {
-        alto = Number(entrada.config.altoMaximo);
-        ancho = alto * proporcion;
-      }
-      entrada.plano.setAttribute("width", ancho);
-      entrada.plano.setAttribute("height", alto);
-      entrada.cargada = true;
-      if (activa === entrada && entrada.detectada && !document.hidden) {
-        entrada.plano.setAttribute("visible", entrada.config.tipo === "imagen" || entrada.reproduciendo);
-        if (entrada.config.tipo === "imagen") mensaje(`${entrada.config.nombre}: imagen reconocida.`);
-      }
+    function actualizarMarco() {
+      escaner.hidden = Boolean(activa) || document.hidden || falloFatal;
     }
 
     function ocultar(entrada) {
@@ -217,20 +127,52 @@
       if (entrada.config.tipo === "video") entrada.medio.pause();
     }
 
-    function actualizarControles() {
-      // Solo se muestra el botón cuando el navegador bloquea play().
-      controles.hidden = !activa || activa.config.tipo !== "video" || reproducir.hidden || document.hidden;
+    function mostrarError(texto, fatal = false) {
+      if (fatal) {
+        falloFatal = true;
+        listo = false;
+        entradas.forEach(ocultar);
+        activa = null;
+        if (sistema?.video?.srcObject) {
+          sistema.video.srcObject.getTracks().forEach((pista) => pista.stop());
+        }
+        sistema?.controller?.stopProcessVideo();
+      }
+      actualizarMarco();
+      acciones.hidden = false;
+      errorTexto.textContent = texto;
+      errorTexto.hidden = false;
+      boton.hidden = false;
+      boton.textContent = fatal ? "Volver a intentar" : "Reintentar video";
     }
 
-    async function reproducirEntrada(entrada) {
+    function ajustar(entrada) {
+      const esVideo = entrada.config.tipo === "video";
+      const w = esVideo ? entrada.medio.videoWidth : entrada.medio.naturalWidth;
+      const h = esVideo ? entrada.medio.videoHeight : entrada.medio.naturalHeight;
+      if (!w || !h) return;
+      let ancho = Number(entrada.config.ancho ?? 1);
+      let alto = ancho * h / w;
+      const maximo = entrada.config.altoMaximo;
+      if (maximo != null && alto > Number(maximo)) {
+        alto = Number(maximo);
+        ancho = alto * w / h;
+      }
+      entrada.plano.setAttribute("width", ancho);
+      entrada.plano.setAttribute("height", alto);
+      entrada.cargada = true;
+      if (activa === entrada && entrada.detectada && !document.hidden && !entrada.error) {
+        entrada.plano.setAttribute("visible", !esVideo || entrada.reproduciendo);
+      }
+    }
+
+    async function reproducir(entrada) {
       if (activa !== entrada || !entrada.detectada || document.hidden || entrada.error) return;
       const turno = ++entrada.turno;
-      entrada.medio.muted = !conSonido;
-      reproducir.hidden = true;
-      actualizarControles();
+      entrada.medio.muted = !USAR_SONIDO;
+      limpiarAcciones();
       try {
         await entrada.medio.play();
-        // Una detección puede perderse mientras play() espera permiso o datos.
         if (activa !== entrada || !entrada.detectada || document.hidden) {
           entrada.medio.pause();
           return;
@@ -238,42 +180,39 @@
         if (turno !== entrada.turno) return;
         entrada.reproduciendo = true;
         entrada.plano.setAttribute("visible", entrada.cargada);
-        actualizarControles();
-        mensaje(`${entrada.config.nombre}: reproduciendo${conSonido ? " con sonido" : " sin sonido"}.`);
+        limpiarAcciones();
       } catch (error) {
-        if (activa !== entrada || !entrada.detectada || turno !== entrada.turno || document.hidden) return;
+        if (activa !== entrada || !entrada.detectada || document.hidden || turno !== entrada.turno) return;
         entrada.reproduciendo = false;
         entrada.plano.setAttribute("visible", false);
         if (error.name === "NotAllowedError") {
-          reproducir.hidden = false;
-          actualizarControles();
-          mensaje("Mantén el dibujo en cámara y pulsa Reproducir video.");
+          acciones.hidden = false;
+          errorTexto.hidden = true;
+          boton.hidden = false;
+          boton.textContent = "Reproducir video";
         } else if (error.name !== "AbortError") {
-          mensaje(`No se puede reproducir ${entrada.config.archivo}. Revisa el archivo y su formato.`);
-          console.error("Error de reproducción:", error);
+          mostrarError(`No se pudo reproducir ${entrada.config.archivo}. Revisa el archivo y su formato.`);
+          console.error(error);
         }
       }
     }
 
     function encontrada(entrada) {
-      if (!arListo || falloFatal) return;
+      if (!listo || falloFatal) return;
       entrada.detectada = true;
       if (activa === entrada) return;
-      entradas.forEach((otra) => {
-        if (otra !== entrada) ocultar(otra);
-      });
+      entradas.forEach((otra) => { if (otra !== entrada) ocultar(otra); });
       activa = entrada;
-      reproducir.hidden = true;
-      actualizarControles();
+      limpiarAcciones();
+      actualizarMarco();
       if (entrada.error) {
-        mensaje(`No se pudo cargar ${entrada.config.archivo}. Revisa su ruta en GitHub.`);
+        mostrarError(`No se encontró ${entrada.config.archivo}. Revisa su ruta en GitHub.`);
         return;
       }
       entrada.plano.setAttribute("visible", entrada.config.tipo === "imagen" && entrada.cargada && !document.hidden);
-      mensaje(`${entrada.config.nombre}: ${entrada.cargada ? "dibujo reconocido" : "cargando contenido…"}`);
       if (entrada.config.tipo === "video") {
         if (entrada.config.reiniciarAlDetectar && entrada.medio.readyState >= 1) entrada.medio.currentTime = 0;
-        void reproducirEntrada(entrada);
+        void reproducir(entrada);
       }
     }
 
@@ -282,48 +221,42 @@
       ocultar(entrada);
       if (activa !== entrada) return;
       activa = null;
-      reproducir.hidden = true;
-      actualizarControles();
-      mensaje("Apunta al dibujo completo para ver su contenido.");
+      limpiarAcciones();
+      actualizarMarco();
     }
 
     function crearEntrada(config, orden, assets) {
-      const medio = document.createElement(config.tipo === "video" ? "video" : "img");
+      const esVideo = config.tipo === "video";
+      const medio = document.createElement(esVideo ? "video" : "img");
       medio.id = `medio-${orden}`;
       medio.crossOrigin = "anonymous";
-      if (config.tipo === "video") {
+      if (esVideo) {
         medio.preload = "metadata";
-        medio.loop = config.repetir !== false;
         medio.muted = true;
+        medio.loop = config.repetir !== false;
         medio.setAttribute("muted", "");
         medio.setAttribute("playsinline", "");
         medio.setAttribute("webkit-playsinline", "");
-      } else {
-        medio.alt = config.nombre || `Contenido ${config.targetIndex + 1}`;
-      }
+      } else medio.alt = "Imagen de realidad aumentada";
       const ancla = document.createElement("a-entity");
       ancla.id = `dibujo-${config.targetIndex}`;
       ancla.setAttribute("mindar-image-target", `targetIndex: ${config.targetIndex}`);
-      const plano = document.createElement(config.tipo === "video" ? "a-video" : "a-image");
+      const plano = document.createElement(esVideo ? "a-video" : "a-image");
       plano.id = `contenido-${config.targetIndex}`;
       plano.setAttribute("src", `#${medio.id}`);
       plano.setAttribute("width", 1);
       plano.setAttribute("height", 1);
-      plano.setAttribute("visible", false); // No mostrar un cuadro deformado antes de conocer sus medidas.
+      plano.setAttribute("visible", false);
       plano.setAttribute("position", config.posicion || "0 0 0.02");
       plano.setAttribute("rotation", config.rotacion || "0 0 0");
       plano.setAttribute("material", "shader: flat; side: double; color: #ffffff; opacity: 1");
-      const entrada = { config, medio, ancla, plano, detectada: false, cargada: false, reproduciendo: false, error: false, turno: 0 };
-      medio.addEventListener(config.tipo === "video" ? "loadedmetadata" : "load", () => ajustarProporcion(entrada));
+      const entrada = { config, medio, ancla, plano, cargada: false, detectada: false, reproduciendo: false, error: false, turno: 0 };
+      medio.addEventListener(esVideo ? "loadedmetadata" : "load", () => ajustar(entrada));
       medio.addEventListener("error", () => {
         entrada.error = true;
         ocultar(entrada);
-        if (activa === entrada) {
-          reproducir.hidden = true;
-          actualizarControles();
-          mensaje(`No se pudo cargar ${config.archivo}. Comprueba nombre, ruta y formato.`);
-        }
-        console.error("No se pudo cargar el contenido:", config.archivo, medio.error);
+        if (activa === entrada) mostrarError(`No se pudo cargar ${config.archivo}. Revisa nombre, ruta y formato.`);
+        console.error("Error al cargar contenido:", config.archivo, medio.error);
       });
       ancla.addEventListener("targetFound", () => encontrada(entrada));
       ancla.addEventListener("targetLost", () => perdida(entrada));
@@ -334,16 +267,45 @@
       entradas.push(entrada);
     }
 
-    function preparar() {
-      if (!window.AFRAME || !AFRAME.components["mindar-image"]) {
-        errorInicio("No se cargaron las bibliotecas. Revisa tu conexión a internet y vuelve a cargar la página.");
+    async function iniciar() {
+      if (iniciando || listo || falloFatal || !sistema) return;
+      iniciando = true;
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        mostrarError("Abre el enlace HTTPS de GitHub Pages en un navegador con acceso a la cámara.", true);
         return;
       }
-      try { validarConfiguracion(); } catch (error) { errorInicio(error.message); return; }
+      try {
+        const respuesta = await fetch(ARCHIVO_MIND, { cache: "no-cache" });
+        if (!respuesta.ok) throw new Error(`No se encontró ${ARCHIVO_MIND} (HTTP ${respuesta.status}).`);
+        if ((respuesta.headers.get("content-type") || "").includes("text/html")) {
+          throw new Error("La ruta del .mind devuelve una página HTML, no el archivo de reconocimiento.");
+        }
+        if (respuesta.body) await respuesta.body.cancel();
+        sistema.start();
+      } catch (error) {
+        mostrarError(`${error.message} Revisa la ruta del .mind y tu conexión.`, true);
+      }
+    }
+
+    function preparar() {
+      if (!window.AFRAME || !AFRAME.components["mindar-image"]) {
+        mostrarError("No se cargaron las bibliotecas. Revisa tu conexión y vuelve a intentar.", true);
+        return;
+      }
+      try {
+        if (!CONTENIDOS.length) throw new Error("Añade al menos un contenido.");
+        const indices = new Set();
+        for (const c of CONTENIDOS) {
+          if (!Number.isInteger(c.targetIndex) || c.targetIndex < 0 || indices.has(c.targetIndex)) throw new Error("Usa un targetIndex entero y distinto para cada dibujo.");
+          if (!["video", "imagen"].includes(c.tipo) || !c.archivo) throw new Error("Cada contenido requiere tipo y archivo.");
+          if (!(Number(c.ancho ?? 1) > 0) || (c.altoMaximo != null && !(Number(c.altoMaximo) > 0))) throw new Error("Revisa ancho y altoMaximo: deben ser positivos.");
+          indices.add(c.targetIndex);
+        }
+      } catch (error) { mostrarError(error.message, true); return; }
       escena = document.createElement("a-scene");
       escena.setAttribute("mindar-image", `imageTargetSrc: ${ARCHIVO_MIND}; autoStart: false; maxTrack: 1; uiLoading: no; uiScanning: no; uiError: no;`);
       escena.setAttribute("renderer", "colorManagement: true; antialias: true; alpha: true");
-      escena.setAttribute("vr-mode-ui", "enabled: false");
+      escena.setAttribute("xr-mode-ui", "enabled: false");
       escena.setAttribute("device-orientation-permission-ui", "enabled: false");
       escena.setAttribute("loading-screen", "enabled: false");
       const assets = document.createElement("a-assets");
@@ -354,82 +316,55 @@
       camara.setAttribute("look-controls", "enabled: false");
       camara.setAttribute("wasd-controls", "enabled: false");
       escena.appendChild(camara);
-      CONTENIDOS.forEach((config, orden) => crearEntrada(config, orden, assets));
+      CONTENIDOS.forEach((c, i) => crearEntrada(c, i, assets));
       escena.addEventListener("renderstart", () => {
-        if (falloFatal) return;
         sistema = escena.systems["mindar-image-system"];
-        abrirCamara.disabled = false;
-        abrirCamara.textContent = "Activar cámara";
-        mensaje("Activa la cámara para explorar el libro.");
+        void iniciar(); // Sin pantalla de bienvenida ni botón de inicio.
       }, { once: true });
       escena.addEventListener("arReady", () => {
         if (falloFatal) return;
-        arListo = true;
-        portada.hidden = true;
-        mensaje("Apunta al dibujo completo, con buena luz y sin reflejos.");
+        listo = true;
+        iniciando = false;
+        limpiarAcciones();
+        actualizarMarco();
       });
       escena.addEventListener("arError", () => {
-        errorInicio("No se pudo iniciar la cámara. Permite su acceso y abre la página HTTPS en Chrome o Safari, fuera del navegador interno de otras apps.");
+        mostrarError("Permite el acceso a la cámara en tu navegador y vuelve a intentar.", true);
       });
       visor.appendChild(escena);
     }
 
-    abrirCamara.addEventListener("click", async () => {
+    boton.addEventListener("click", () => {
       if (falloFatal) { location.reload(); return; }
-      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        errorInicio("La cámara necesita HTTPS y un navegador compatible. Abre el enlace público de GitHub Pages, no el archivo descargado.");
-        return;
-      }
-      if (!sistema) return;
-      conSonido = usarAudio.checked;
-      abrirCamara.disabled = true;
-      abrirCamara.textContent = "Comprobando archivos…";
-      try {
-        // Evita que una ruta inexistente deje el visor cargando sin explicación.
-        const respuesta = await fetch(ARCHIVO_MIND, { cache: "no-cache" });
-        if (!respuesta.ok) throw new Error(`No se encontró ${ARCHIVO_MIND} (HTTP ${respuesta.status}).`);
-        if ((respuesta.headers.get("content-type") || "").includes("text/html")) {
-          throw new Error(`${ARCHIVO_MIND} devuelve una página HTML, no un archivo de reconocimiento.`);
-        }
-        // MindAR cargará los datos por su cuenta al iniciar el reconocimiento.
-        if (respuesta.body) await respuesta.body.cancel();
-        abrirCamara.textContent = "Permite la cámara y espera…";
-        sistema.start(); // En MindAR 1.2.5 start() no devuelve una promesa de disponibilidad.
-      } catch (error) {
-        errorInicio(`${error.message} Revisa la ruta del archivo .mind y tu conexión.`);
+      if (activa?.config.tipo === "video") {
+        if (activa.error) { location.reload(); return; }
+        void reproducir(activa);
       }
     });
-
-    reproducir.addEventListener("click", () => {
-      if (activa?.config.tipo === "video") void reproducirEntrada(activa);
-    });
-
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         entradas.forEach(ocultar);
-        controles.hidden = true;
-        if (arListo && sistema?.controller) {
+        limpiarAcciones();
+        actualizarMarco();
+        if (listo && sistema?.controller) {
           sistema.pause(true);
           pausadoPorPestana = true;
         }
-      } else if (arListo && !falloFatal) {
+      } else if (listo && !falloFatal) {
         if (pausadoPorPestana) { sistema.unpause(); pausadoPorPestana = false; }
-        actualizarControles();
+        actualizarMarco();
         if (activa?.detectada && !activa.error) {
           activa.plano.setAttribute("visible", activa.config.tipo === "imagen" && activa.cargada);
-          if (activa.config.tipo === "video") void reproducirEntrada(activa);
+          if (activa.config.tipo === "video") void reproducir(activa);
         }
       }
     });
-
-    // MindAR 1.2.5 puede fallar al leer un .mind inválido sin emitir arError.
     window.addEventListener("unhandledrejection", (evento) => {
-      if (!arListo && abrirCamara.disabled && sistema && !falloFatal) {
-        console.error("Error al iniciar el reconocimiento:", evento.reason);
-        errorInicio("No se pudo preparar el reconocimiento. Comprueba que el .mind sea válido y que el navegador tenga acceso a la cámara.");
+      if (iniciando && !listo && !falloFatal) {
+        console.error(evento.reason);
+        mostrarError("No se pudo iniciar el reconocimiento. Revisa que el .mind sea válido y permite la cámara.", true);
       }
     });
-
     preparar();
   </script>
 </body>
