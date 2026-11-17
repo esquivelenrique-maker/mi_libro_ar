@@ -9,21 +9,42 @@
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
+    :root {
+      --margen-x: clamp(4px, 1vw, 14px);
+      --margen-y: clamp(6px, 1.5vh, 18px);
+    }
+    /* Unidades dinámicas: considera las barras del navegador móvil. */
+    @supports (height: 100dvh) {
+      :root { --margen-y: clamp(6px, 1.5dvh, 18px); }
+    }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
     body { background: #101820; font-family: Arial, Helvetica, sans-serif; }
     [hidden] { display: none !important; }
     #visor { position: fixed; inset: 0; isolation: isolate; z-index: 0; }
     #visor a-scene { width: 100%; height: 100%; }
+    #pantalla {
+      position: fixed; z-index: 12; pointer-events: none;
+      top: max(var(--margen-y), env(safe-area-inset-top));
+      bottom: max(var(--margen-y), env(safe-area-inset-bottom));
+      left: max(var(--margen-x), env(safe-area-inset-left));
+      right: max(var(--margen-x), env(safe-area-inset-right));
+      /* Sin fondo: la cámara sigue visible alrededor del contenido. */
+    }
+    #pantalla > video, #pantalla > img {
+      display: block; width: 100%; height: 100%; object-fit: contain;
+      object-position: center; background: transparent;
+    }
     #escaner {
       position: fixed; inset: 0; z-index: 10; pointer-events: none;
       display: flex; align-items: center; justify-content: center;
     }
     .marco {
-      position: relative; width: min(78vw, 340px, 70vh); aspect-ratio: 1;
+      position: relative; width: min(78vw, 70vh, 520px); aspect-ratio: 1;
       border: 1px solid rgba(255,255,255,.28); border-radius: 16px;
       /* Sin relleno ni sombra: toda la cámara sigue siendo visible. */
     }
+    @supports (height: 100dvh) { .marco { width: min(78vw, 70dvh, 520px); } }
     .esquina { position: absolute; width: 36px; height: 36px; border: 3px solid #a3e3cd; }
     .superior-izquierda { top: -2px; left: -2px; border-right: 0; border-bottom: 0; border-radius: 16px 0 0 0; }
     .superior-derecha { top: -2px; right: -2px; border-left: 0; border-bottom: 0; border-radius: 0 16px 0 0; }
@@ -56,6 +77,7 @@
 </head>
 <body>
   <main id="visor" aria-label="Cámara del libro"></main>
+  <section id="pantalla" aria-label="Video del dibujo a tamaño grande" hidden></section>
   <div id="escaner" aria-label="Recuadro para escanear el dibujo">
     <div class="marco" aria-hidden="true">
       <span class="esquina superior-izquierda"></span>
@@ -78,6 +100,10 @@
     // CONFIGURACIÓN. Tus archivos están junto a index.html, sin carpetas.
     const ARCHIVO_MIND = "./pagina.mind";
     const USAR_SONIDO = true; // false: reproducción automática sin voz.
+    // "pantalla": video grande centrado; "dibujo": contenido pegado al papel.
+    const PRESENTACION = "pantalla";
+    // "contain": muestra todo, sin deformar. "cover": llena el visor y recorta bordes.
+    const AJUSTE_PANTALLA = "contain";
     const CONTENIDOS = [
       {
         targetIndex: 0,
@@ -97,6 +123,7 @@
     ];
 
     const visor = document.querySelector("#visor");
+    const pantalla = document.querySelector("#pantalla");
     const escaner = document.querySelector("#escaner");
     const acciones = document.querySelector("#acciones");
     const errorTexto = document.querySelector("#error");
@@ -120,10 +147,28 @@
       escaner.hidden = Boolean(activa) || document.hidden || falloFatal;
     }
 
+    function actualizarPantalla() {
+      pantalla.hidden = !entradas.some((entrada) => entrada.enPantalla && !entrada.medio.hidden);
+    }
+
+    function mostrarContenido(entrada) {
+      const visible = activa === entrada && entrada.detectada && entrada.cargada &&
+        !entrada.error && !document.hidden &&
+        (entrada.config.tipo === "imagen" || entrada.reproduciendo);
+      if (entrada.enPantalla) {
+        entrada.medio.hidden = !visible;
+        actualizarPantalla();
+      } else {
+        entrada.plano.setAttribute("visible", visible);
+      }
+    }
+
     function ocultar(entrada) {
       entrada.turno += 1;
       entrada.reproduciendo = false;
-      entrada.plano.setAttribute("visible", false);
+      if (entrada.enPantalla) entrada.medio.hidden = true;
+      else entrada.plano.setAttribute("visible", false);
+      actualizarPantalla();
       if (entrada.config.tipo === "video") entrada.medio.pause();
     }
 
@@ -151,6 +196,12 @@
       const w = esVideo ? entrada.medio.videoWidth : entrada.medio.naturalWidth;
       const h = esVideo ? entrada.medio.videoHeight : entrada.medio.naturalHeight;
       if (!w || !h) return;
+      entrada.cargada = true;
+      if (entrada.enPantalla) {
+        // CSS adapta el archivo a la pantalla; ya no depende del tamaño del dibujo.
+        mostrarContenido(entrada);
+        return;
+      }
       let ancho = Number(entrada.config.ancho ?? 1);
       let alto = ancho * h / w;
       const maximo = entrada.config.altoMaximo;
@@ -160,10 +211,7 @@
       }
       entrada.plano.setAttribute("width", ancho);
       entrada.plano.setAttribute("height", alto);
-      entrada.cargada = true;
-      if (activa === entrada && entrada.detectada && !document.hidden && !entrada.error) {
-        entrada.plano.setAttribute("visible", !esVideo || entrada.reproduciendo);
-      }
+      mostrarContenido(entrada);
     }
 
     async function reproducir(entrada) {
@@ -179,12 +227,12 @@
         }
         if (turno !== entrada.turno) return;
         entrada.reproduciendo = true;
-        entrada.plano.setAttribute("visible", entrada.cargada);
+        mostrarContenido(entrada);
         limpiarAcciones();
       } catch (error) {
         if (activa !== entrada || !entrada.detectada || document.hidden || turno !== entrada.turno) return;
         entrada.reproduciendo = false;
-        entrada.plano.setAttribute("visible", false);
+        mostrarContenido(entrada);
         if (error.name === "NotAllowedError") {
           acciones.hidden = false;
           errorTexto.hidden = true;
@@ -209,7 +257,7 @@
         mostrarError(`No se encontró ${entrada.config.archivo}. Revisa su ruta en GitHub.`);
         return;
       }
-      entrada.plano.setAttribute("visible", entrada.config.tipo === "imagen" && entrada.cargada && !document.hidden);
+      mostrarContenido(entrada);
       if (entrada.config.tipo === "video") {
         if (entrada.config.reiniciarAlDetectar && entrada.medio.readyState >= 1) entrada.medio.currentTime = 0;
         void reproducir(entrada);
@@ -227,6 +275,7 @@
 
     function crearEntrada(config, orden, assets) {
       const esVideo = config.tipo === "video";
+      const enPantalla = (config.presentacion || PRESENTACION) === "pantalla";
       const medio = document.createElement(esVideo ? "video" : "img");
       medio.id = `medio-${orden}`;
       medio.crossOrigin = "anonymous";
@@ -241,16 +290,25 @@
       const ancla = document.createElement("a-entity");
       ancla.id = `dibujo-${config.targetIndex}`;
       ancla.setAttribute("mindar-image-target", `targetIndex: ${config.targetIndex}`);
-      const plano = document.createElement(esVideo ? "a-video" : "a-image");
-      plano.id = `contenido-${config.targetIndex}`;
-      plano.setAttribute("src", `#${medio.id}`);
-      plano.setAttribute("width", 1);
-      plano.setAttribute("height", 1);
-      plano.setAttribute("visible", false);
-      plano.setAttribute("position", config.posicion || "0 0 0.02");
-      plano.setAttribute("rotation", config.rotacion || "0 0 0");
-      plano.setAttribute("material", "shader: flat; side: double; color: #ffffff; opacity: 1");
-      const entrada = { config, medio, ancla, plano, cargada: false, detectada: false, reproduciendo: false, error: false, turno: 0 };
+      let plano = null;
+      if (enPantalla) {
+        medio.hidden = true;
+        medio.style.objectFit = AJUSTE_PANTALLA;
+        pantalla.appendChild(medio);
+      } else {
+        assets.appendChild(medio);
+        plano = document.createElement(esVideo ? "a-video" : "a-image");
+        plano.id = `contenido-${config.targetIndex}`;
+        plano.setAttribute("src", `#${medio.id}`);
+        plano.setAttribute("width", 1);
+        plano.setAttribute("height", 1);
+        plano.setAttribute("visible", false);
+        plano.setAttribute("position", config.posicion || "0 0 0.02");
+        plano.setAttribute("rotation", config.rotacion || "0 0 0");
+        plano.setAttribute("material", "shader: flat; side: double; color: #ffffff; opacity: 1");
+        ancla.appendChild(plano);
+      }
+      const entrada = { config, medio, ancla, plano, enPantalla, cargada: false, detectada: false, reproduciendo: false, error: false, turno: 0 };
       medio.addEventListener(esVideo ? "loadedmetadata" : "load", () => ajustar(entrada));
       medio.addEventListener("error", () => {
         entrada.error = true;
@@ -260,9 +318,7 @@
       });
       ancla.addEventListener("targetFound", () => encontrada(entrada));
       ancla.addEventListener("targetLost", () => perdida(entrada));
-      assets.appendChild(medio);
       medio.src = config.archivo;
-      ancla.appendChild(plano);
       escena.appendChild(ancla);
       entradas.push(entrada);
     }
@@ -294,10 +350,13 @@
       }
       try {
         if (!CONTENIDOS.length) throw new Error("Añade al menos un contenido.");
+        if (!["pantalla", "dibujo"].includes(PRESENTACION)) throw new Error("PRESENTACION debe ser 'pantalla' o 'dibujo'.");
+        if (!["contain", "cover"].includes(AJUSTE_PANTALLA)) throw new Error("AJUSTE_PANTALLA debe ser 'contain' o 'cover'.");
         const indices = new Set();
         for (const c of CONTENIDOS) {
           if (!Number.isInteger(c.targetIndex) || c.targetIndex < 0 || indices.has(c.targetIndex)) throw new Error("Usa un targetIndex entero y distinto para cada dibujo.");
           if (!["video", "imagen"].includes(c.tipo) || !c.archivo) throw new Error("Cada contenido requiere tipo y archivo.");
+          if (c.presentacion && !["pantalla", "dibujo"].includes(c.presentacion)) throw new Error("La presentación del contenido debe ser 'pantalla' o 'dibujo'.");
           if (!(Number(c.ancho ?? 1) > 0) || (c.altoMaximo != null && !(Number(c.altoMaximo) > 0))) throw new Error("Revisa ancho y altoMaximo: deben ser positivos.");
           indices.add(c.targetIndex);
         }
@@ -354,7 +413,7 @@
         if (pausadoPorPestana) { sistema.unpause(); pausadoPorPestana = false; }
         actualizarMarco();
         if (activa?.detectada && !activa.error) {
-          activa.plano.setAttribute("visible", activa.config.tipo === "imagen" && activa.cargada);
+          mostrarContenido(activa);
           if (activa.config.tipo === "video") void reproducir(activa);
         }
       }
